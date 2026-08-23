@@ -1,0 +1,13 @@
+# C++ compiled executables
+*.exe
+*.out
+*.o
+*.obj
+
+# Custom build files
+library.exe
+library
+
+# Editor settings
+.vscode/
+.DS_Store
