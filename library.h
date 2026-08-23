@@ -22,11 +22,15 @@ private:
     vector<Book> books;
     HistoryNode* historyHead; // Linked List ka Head pointer
 
-    // Helpers
+    // DSA Concept: Sorting Algorithm
     void sortBooksById(); 
+
+    // DSA Concept: Searching Algorithms
     void linearSearch(int id) const;
     void binarySearch(int id) const;
-    void addHistory(string message); // History list mein node add karne ke liye
+
+    // History list mein node add karne ke liye
+    void addHistory(string message); 
 
 public:
     Library();  // Constructor
