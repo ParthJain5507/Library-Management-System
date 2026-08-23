@@ -6,12 +6,19 @@
 
 class Library {
 private:
-    // DSA Concept #1: Vector
     vector<Book> books;
+    
+    // DSA Concept: Sorting Algorithm
+    void sortBooksById(); 
+
+    // DSA Concept: Searching Algorithms
+    void linearSearch(int id) const;
+    void binarySearch(int id) const;
 
 public:
     void addBook();
     void viewAllBooks() const;
+    void searchBook(); // Naya search menu
 };
 
 #endif
