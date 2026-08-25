@@ -520,7 +520,6 @@ export default function SELibrarySystem() {
 
           {activeTab === 'admin' && currentRole === 'admin' && isAdminAuthenticated && (
             <div className="space-y-6">
-              {/* Master Department Dashboard for Admin */}
               <div className="bg-[#121215] border border-zinc-800/80 p-6 rounded space-y-4">
                 <div>
                   <h2 className="text-sm font-medium text-zinc-100 tracking-wide">Master Department Dashboard (All Active Issues)</h2>
@@ -565,7 +564,6 @@ export default function SELibrarySystem() {
                 )}
               </div>
 
-              {/* Insert Book Box */}
               <div className="bg-[#121215] border border-zinc-800/80 p-6 rounded space-y-4">
                 <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-500">Insert New Book Record</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
@@ -576,7 +574,6 @@ export default function SELibrarySystem() {
                 </div>
               </div>
 
-              {/* Admin Book Deletion Table */}
               <div className="bg-[#121215] border border-zinc-800/80 p-6 rounded space-y-4">
                 <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-500">Admin Management: Remove Books from Registry</h2>
                 <div className="rounded overflow-hidden border border-zinc-800">
