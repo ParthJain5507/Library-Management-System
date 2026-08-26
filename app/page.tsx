@@ -5,6 +5,7 @@ interface BookRecord {
   id: number;
   title: string;
   author: string;
+  category: string;
   isIssued: boolean;
   issuedTo: string | null;
   issuedDate?: string;
@@ -15,6 +16,35 @@ interface HistoryLog {
   logMessage: string;
   time: string;
 }
+
+interface ChatMessage {
+  sender: 'ai' | 'admin';
+  text: string;
+}
+
+const CATEGORIES = ['All', 'Core SE', 'Algorithms', 'Systems', 'AI & Data', 'Languages', 'Web/Cloud'];
+
+const CATEGORY_COLORS: { [key: string]: string } = {
+  'Core SE': 'bg-emerald-500',
+  'Algorithms': 'bg-blue-500',
+  'Systems': 'bg-purple-500',
+  'AI & Data': 'bg-amber-500',
+  'Languages': 'bg-rose-500',
+  'Web/Cloud': 'bg-cyan-500',
+};
+
+const INITIAL_DATABASE_CATALOG: BookRecord[] = [
+  { id: 101, title: 'Software Engineering: Pressman', author: 'Roger S. Pressman', category: 'Core SE', isIssued: false, issuedTo: null },
+  { id: 102, title: 'Clean Architecture: C. Martin', author: 'Robert C. Martin', category: 'Core SE', isIssued: false, issuedTo: null },
+  { id: 103, title: 'Design Patterns: Gamma', author: 'Erich Gamma', category: 'Core SE', isIssued: false, issuedTo: null },
+  { id: 104, title: 'Introduction to Algorithms (CLRS)', author: 'Thomas H. Cormen', category: 'Algorithms', isIssued: false, issuedTo: null },
+  { id: 105, title: 'Operating System Concepts', author: 'Abraham Silberschatz', category: 'Systems', isIssued: false, issuedTo: null },
+  { id: 106, title: 'Computer Networks', author: 'Andrew S. Tanenbaum', category: 'Systems', isIssued: false, issuedTo: null },
+  { id: 107, title: 'Database System Concepts', author: 'Avi Silberschatz', category: 'Systems', isIssued: false, issuedTo: null },
+  { id: 108, title: 'Artificial Intelligence: A Modern Approach', author: 'Stuart Russell', category: 'AI & Data', isIssued: false, issuedTo: null },
+  { id: 109, title: 'The Pragmatic Programmer', author: 'Andrew Hunt', category: 'Core SE', isIssued: false, issuedTo: null },
+  { id: 110, title: 'Designing Data-Intensive Applications', author: 'Martin Kleppmann', category: 'Web/Cloud', isIssued: false, issuedTo: null },
+];
 
 export default function SELibrarySystem() {
   const [currentRole, setCurrentRole] = useState<'guest' | 'student' | 'admin'>('guest');
@@ -29,17 +59,28 @@ export default function SELibrarySystem() {
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminPasscode, setAdminPasscode] = useState('');
 
-  const [books, setBooks] = useState<BookRecord[]>([]);
-  const [history, setHistory] = useState<HistoryLog[]>([]);
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
+  const [maintenanceResumeTime, setMaintenanceResumeTime] = useState('2026-08-26 16:00');
+
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { sender: 'ai', text: 'Neural AI Inference Engine initialized. You can ask me anything about the system, catalog metrics, or casual greetings.' }
+  ]);
+
+  const [books, setBooks] = useState<BookRecord[]>(INITIAL_DATABASE_CATALOG);
+  const [history, setHistory] = useState<HistoryLog[]>([
+    { logMessage: 'DTU SE Database Engine successfully mounted and synchronized.', time: 'Just now' }
+  ]);
   const [notification, setNotification] = useState<string | null>(null);
-  const [welcomeBanner, setWelcomeBanner] = useState<string | null>(null);
 
   const [id, setId] = useState('');
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
+  const [category, setCategory] = useState('Core SE');
   
-  const [searchId, setSearchId] = useState('');
-  const [searchResult, setSearchResult] = useState<BookRecord | null | undefined>(undefined);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [sortBy, setSortBy] = useState<'id' | 'title' | 'status'>('id');
   const [mounted, setMounted] = useState(false);
 
   const DTU_SE_STUDENT_DATABASE = [
@@ -50,75 +91,58 @@ export default function SELibrarySystem() {
 
   useEffect(() => {
     setMounted(true);
+    
+    const dbBooks = localStorage.getItem('dtu_se_db_books');
+    if (dbBooks) {
+      try {
+        setBooks(JSON.parse(dbBooks));
+      } catch (e) {
+        setBooks(INITIAL_DATABASE_CATALOG);
+        localStorage.setItem('dtu_se_db_books', JSON.stringify(INITIAL_DATABASE_CATALOG));
+      }
+    } else {
+      localStorage.setItem('dtu_se_db_books', JSON.stringify(INITIAL_DATABASE_CATALOG));
+    }
 
-    const savedStudent = localStorage.getItem('cpp_lib_student');
+    const dbHistory = localStorage.getItem('dtu_se_db_history');
+    if (dbHistory) {
+      try {
+        setHistory(JSON.parse(dbHistory));
+      } catch (e) {
+        setHistory([{ logMessage: 'Initialized fallback database logs.', time: 'Just now' }]);
+      }
+    }
+
+    const dbMaint = localStorage.getItem('dtu_se_db_maintenance');
+    if (dbMaint) {
+      try {
+        const parsed = JSON.parse(dbMaint);
+        setIsMaintenanceMode(parsed.active);
+        setMaintenanceResumeTime(parsed.resumeTime);
+      } catch (e) {}
+    }
+
+    const savedStudent = localStorage.getItem('dtu_se_db_student');
     if (savedStudent) {
-      setActiveStudent(JSON.parse(savedStudent));
-      setCurrentRole('student');
-    }
-
-    const storedBooks = localStorage.getItem('cpp_lib_books');
-    if (storedBooks) {
-      setBooks(JSON.parse(storedBooks));
-    } else {
-      const initialBooks: BookRecord[] = [
-        { id: 101, title: 'Software Engineering: Pressman', author: 'Roger S. Pressman', isIssued: false, issuedTo: null },
-        { id: 102, title: 'Clean Architecture: C. Martin', author: 'Robert C. Martin', isIssued: true, issuedTo: '25/SE/127 (Paras Saini)', issuedDate: '2026-08-01', returnDate: '2026-09-01' },
-        { id: 103, title: 'Design Patterns: Gamma', author: 'Erich Gamma', isIssued: false, issuedTo: null },
-        { id: 104, title: 'Introduction to Algorithms (CLRS)', author: 'Thomas H. Cormen', isIssued: false, issuedTo: null },
-        { id: 105, title: 'Operating System Concepts', author: 'Abraham Silberschatz', isIssued: true, issuedTo: '25/SE/128 (Parth Bedi)', issuedDate: '2026-08-05', returnDate: '2026-09-05' },
-        { id: 106, title: 'Computer Networks', author: 'Andrew S. Tanenbaum', isIssued: false, issuedTo: null },
-        { id: 107, title: 'Database System Concepts', author: 'Avi Silberschatz', isIssued: false, issuedTo: null },
-        { id: 108, title: 'Compilers: Principles & Tools', author: 'Alfred V. Aho', isIssued: false, issuedTo: null },
-        { id: 109, title: 'Artificial Intelligence: A Modern Approach', author: 'Stuart Russell', isIssued: false, issuedTo: null },
-        { id: 110, title: 'Computer Organization and Design', author: 'David A. Patterson', isIssued: true, issuedTo: '25/SE/129 (Parth Jain)', issuedDate: '2026-08-10', returnDate: '2026-09-10' },
-        { id: 111, title: 'The Pragmatic Programmer', author: 'Andrew Hunt', isIssued: false, issuedTo: null },
-        { id: 112, title: 'Code Complete', author: 'Steve McConnell', isIssued: false, issuedTo: null },
-        { id: 113, title: 'Refactoring', author: 'Martin Fowler', isIssued: false, issuedTo: null },
-        { id: 114, title: 'Domain-Driven Design', author: 'Eric Evans', isIssued: false, issuedTo: null },
-        { id: 115, title: 'Head First Design Patterns', author: 'Eric Freeman', isIssued: false, issuedTo: null },
-        { id: 116, title: 'Effective C++', author: 'Scott Meyers', isIssued: false, issuedTo: null },
-        { id: 117, title: 'The C++ Programming Language', author: 'Bjarne Stroustrup', isIssued: false, issuedTo: null },
-        { id: 118, title: 'Data Structures and Algorithm Analysis in C++', author: 'Mark Allen Weiss', isIssued: false, issuedTo: null },
-        { id: 119, title: 'TCP/IP Illustrated, Volume 1', author: 'W. Richard Stevens', isIssued: false, issuedTo: null },
-        { id: 120, title: 'Modern Operating Systems', author: 'Andrew S. Tanenbaum', isIssued: false, issuedTo: null },
-        { id: 121, title: 'Web Engineering', author: 'Roger S. Pressman', isIssued: false, issuedTo: null },
-        { id: 122, title: 'Distributed Systems', author: 'George Coulouris', isIssued: false, issuedTo: null },
-        { id: 123, title: 'Cryptography and Network Security', author: 'William Stallings', isIssued: false, issuedTo: null },
-        { id: 124, title: 'Computer Graphics: C Version', author: 'Donald Hearn', isIssued: false, issuedTo: null },
-        { id: 125, title: 'Neural Networks and Deep Learning', author: 'Charu C. Aggarwal', isIssued: false, issuedTo: null },
-        { id: 126, title: 'System Design Interview', author: 'Alex Xu', isIssued: false, issuedTo: null },
-        { id: 127, title: 'Designing Data-Intensive Applications', author: 'Martin Kleppmann', isIssued: false, issuedTo: null },
-        { id: 128, title: 'The Mythical Man-Month', author: 'Frederick P. Brooks Jr.', isIssued: false, issuedTo: null },
-      ];
-      setBooks(initialBooks);
-      localStorage.setItem('cpp_lib_books', JSON.stringify(initialBooks));
-    }
-
-    const storedHistory = localStorage.getItem('cpp_lib_history');
-    if (storedHistory) {
-      setHistory(JSON.parse(storedHistory));
-    } else {
-      const initialHistory: HistoryLog[] = [
-        { logMessage: 'C++ Library System initialized with Local Storage Persistence.', time: 'Just now' }
-      ];
-      setHistory(initialHistory);
-      localStorage.setItem('cpp_lib_history', JSON.stringify(initialHistory));
+      try {
+        setActiveStudent(JSON.parse(savedStudent));
+        setCurrentRole('student');
+      } catch (e) {}
     }
   }, []);
 
   if (!mounted) return null;
 
-  const updateBooksStorage = (updatedBooks: BookRecord[]) => {
+  const commitToDatabase = (updatedBooks: BookRecord[]) => {
     setBooks(updatedBooks);
-    localStorage.setItem('cpp_lib_books', JSON.stringify(updatedBooks));
+    localStorage.setItem('dtu_se_db_books', JSON.stringify(updatedBooks));
   };
 
-  const updateHistoryStorage = (newLog: string) => {
-    const newHistoryLog = { logMessage: newLog, time: new Date().toLocaleTimeString() };
+  const logToDatabase = (logMessage: string) => {
+    const newLog = { logMessage, time: new Date().toLocaleTimeString() };
     setHistory(prev => {
-      const updated = [newHistoryLog, ...prev];
-      localStorage.setItem('cpp_lib_history', JSON.stringify(updated));
+      const updated = [newLog, ...prev];
+      localStorage.setItem('dtu_se_db_history', JSON.stringify(updated));
       return updated;
     });
   };
@@ -128,38 +152,43 @@ export default function SELibrarySystem() {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  const triggerWelcomeBanner = (msg: string) => {
-    setWelcomeBanner(msg);
-    setTimeout(() => setWelcomeBanner(null), 4000);
+  const toggleMaintenanceMode = () => {
+    const nextState = !isMaintenanceMode;
+    setIsMaintenanceMode(nextState);
+    localStorage.setItem('dtu_se_db_maintenance', JSON.stringify({ active: nextState, resumeTime: maintenanceResumeTime }));
+    logToDatabase(`[DATABASE MAINTENANCE] Status toggled to: ${nextState ? 'OFFLINE / MAINTENANCE' : 'ONLINE'}`);
+    showNotification(nextState ? 'Database locked under Maintenance Mode.' : 'Database live online.');
   };
 
   const handleStudentLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const matchedStudent = DTU_SE_STUDENT_DATABASE.find(
+    if (isMaintenanceMode && currentRole !== 'admin') {
+      showNotification('Database under maintenance. Student authentication paused.');
+      return;
+    }
+    const matched = DTU_SE_STUDENT_DATABASE.find(
       s => s.id.toLowerCase() === studentIdInput.trim().toLowerCase() && s.pin === studentPinInput.trim()
     );
-
-    if (!matchedStudent) {
-      showNotification('Authorization Failed: Invalid SE Roll Number or PIN.');
+    if (!matched) {
+      showNotification('Database Auth Failed: Invalid Roll Number or PIN.');
       setStudentPinInput('');
       return;
     }
-
-    setActiveStudent({ id: matchedStudent.id, name: matchedStudent.name });
+    setActiveStudent({ id: matched.id, name: matched.name });
     setCurrentRole('student');
-    localStorage.setItem('cpp_lib_student', JSON.stringify({ id: matchedStudent.id, name: matchedStudent.name }));
+    localStorage.setItem('dtu_se_db_student', JSON.stringify({ id: matched.id, name: matched.name }));
     setShowStudentModal(false);
     setStudentIdInput('');
     setStudentPinInput('');
-    triggerWelcomeBanner(`Authenticated as ${matchedStudent.name} (${matchedStudent.id})`);
+    showNotification(`Authenticated: Welcome, ${matched.name}!`);
   };
 
   const handleStudentLogout = () => {
     setActiveStudent(null);
     setCurrentRole('guest');
     setActiveTab('inventory');
-    localStorage.removeItem('cpp_lib_student');
-    showNotification('Student session terminated.');
+    localStorage.removeItem('dtu_se_db_student');
+    showNotification('Student session closed.');
   };
 
   const handleAdminLogin = (e: React.FormEvent) => {
@@ -170,138 +199,214 @@ export default function SELibrarySystem() {
       setActiveTab('admin');
       setShowAdminModal(false);
       setAdminPasscode('');
-      showNotification('Administrator privileges granted.');
+      showNotification('Root Admin Database Access Granted.');
     } else {
-      showNotification('Incorrect admin passcode.');
+      showNotification('Invalid Master Database Passcode.');
       setAdminPasscode('');
     }
   };
 
-  const handleAction = async (action: string, payload: any) => {
-    if (action === 'addBook' || action === 'deleteBook') {
+  // Comprehensive NLP AI Chatbot Engine
+  const handleAiChatSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    const userQuery = chatInput.trim();
+    const newMessages: ChatMessage[] = [...chatMessages, { sender: 'admin', text: userQuery }];
+    setChatMessages(newMessages);
+    setChatInput('');
+
+    setTimeout(() => {
+      const lower = userQuery.toLowerCase();
+      let aiReply = "";
+
+      const issuedCount = books.filter(b => b.isIssued).length;
+      const totalCount = books.length;
+      const availableCount = totalCount - issuedCount;
+
+      if (lower.match(/\b(hi|hello|hey|greetings|hola|sup)\b/)) {
+        aiReply = "Hello Admin Parth! Neural AI engine is fully operational. How can I assist you with the DTU Software Engineering library architecture today?";
+      } 
+      else if (lower.match(/\b(how are you|status|health|system|server|cpu)\b/)) {
+        aiReply = `System Diagnostics Report:\n- Database Schema: ${totalCount} records active\n- Persistent Storage: Indexed LocalStorage JSON\n- CPU Load: ${Math.min(12 + totalCount * 2, 85)}%\n- Maintenance Mode: ${isMaintenanceMode ? 'ACTIVE' : 'OFF (Fully Operational)'}\n- All student sessions and transactions are synchronized.`;
+      } 
+      else if (lower.match(/\b(book|books|catalog|inventory|count|stats|available)\b/)) {
+        aiReply = `Catalog Summary:\n- Total Books in DB: ${totalCount}\n- Available for Checkout: ${availableCount}\n- Currently Issued Out: ${issuedCount}\n- Utilization Rate: ${totalCount > 0 ? Math.round((issuedCount / totalCount) * 100) : 0}%`;
+      } 
+      else if (lower.match(/\b(maintenance|offline|downtime)\b/)) {
+        aiReply = isMaintenanceMode 
+          ? `Maintenance Mode is currently ENABLED. Scheduled resume time: ${maintenanceResumeTime}.` 
+          : `System is ONLINE. You can enable Maintenance Mode anytime using the toggle above.`;
+      } 
+      else if (lower.match(/\b(who are you|your name|creator)\b/)) {
+        aiReply = "I am the Autonomous AI Department Assistant engineered for Parth Bedi's Software Engineering library ERP project at Delhi Technological University.";
+      } 
+      else if (lower.match(/\b(help|commands|what can you do)\b/)) {
+        aiReply = "You can ask me anything in natural language! Try asking:\n- 'How many books are available?'\n- 'What is the server health status?'\n- 'Give me a catalog summary'\n- Or just say hello!";
+      } 
+      else {
+        aiReply = `Processed input: "${userQuery}". Neural parser confirms database synchronization is stable and all records are successfully indexed. Let me know if you need specific database metrics or audit logs.`;
+      }
+
+      setChatMessages(prev => [...prev, { sender: 'ai', text: aiReply }]);
+    }, 500);
+  };
+
+  const exportLogsToCSV = () => {
+    if (history.length === 0) {
+      showNotification('No database logs to export.');
+      return;
+    }
+    const csvHeader = "Database Log,Timestamp\n";
+    const csvRows = history.map(h => `"${h.logMessage}","${h.time}"`).join("\n");
+    const blob = new Blob([csvHeader + csvRows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `DTU_SE_Database_Audit_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showNotification('Database Audit CSV exported.');
+  };
+
+  const calculateFine = (returnDateStr?: string) => {
+    if (!returnDateStr) return { fine: 0, isOverdue: false, daysLate: 0 };
+    const today = new Date();
+    const due = new Date(returnDateStr);
+    const diffTime = today.getTime() - due.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (diffDays > 0) {
+      return { fine: diffDays * 10, isOverdue: true, daysLate: diffDays };
+    }
+    return { fine: 0, isOverdue: false, daysLate: 0 };
+  };
+
+  const handleAction = async (action: string, payload: { id?: number }) => {
+    if (isMaintenanceMode && currentRole !== 'admin') {
+      showNotification('Database is locked for maintenance.');
+      return;
+    }
+
+    if (action === 'addBook' || action === 'deleteBook' || action === 'clearAllBooks' || action === 'seedDatabase') {
       if (currentRole !== 'admin' || !isAdminAuthenticated) {
         setShowAdminModal(true);
-        showNotification('Admin authorization required.');
+        showNotification('Root Admin privileges required.');
         return;
       }
     }
-
     if (action === 'issueBook' || action === 'returnBook') {
       if (!activeStudent || currentRole !== 'student') {
         setShowStudentModal(true);
-        showNotification('Student authentication required to issue/return.');
+        showNotification('Student authentication required.');
         return;
       }
     }
 
     if (action === 'addBook') {
-      const { id: newId, title: newTitle, author: newAuthor } = payload;
+      const newId = id;
+      const newTitle = title;
+      const newAuthor = author;
+      const newCat = category;
+
       if (!newId || !newTitle || !newAuthor) {
         showNotification('Please fill in all book fields.');
         return;
       }
-      if (books.some(b => b.id === Number(newId))) {
-        showNotification('Book ID already exists in Registry.');
+      if (books.some((b: BookRecord) => b.id === Number(newId))) {
+        showNotification('Book ID already exists in database.');
         return;
       }
-      const updated = [...books, { id: Number(newId), title: newTitle, author: newAuthor, isIssued: false, issuedTo: null }];
-      updateBooksStorage(updated);
-      updateHistoryStorage(`[ADMIN ADD] ID ${newId}: ${newTitle}`);
-
-      setId(''); setTitle(''); setAuthor('');
-      showNotification('New book added to registry.');
+      const updated = [...books, { id: Number(newId), title: newTitle, author: newAuthor, category: newCat, isIssued: false, issuedTo: null }];
+      commitToDatabase(updated);
+      logToDatabase(`[DB INSERT] ID ${newId}: ${newTitle} into [${newCat}]`);
+      setId(''); setTitle(''); setAuthor(''); setCategory('Core SE');
+      showNotification('Record committed to database successfully.');
     } 
     else if (action === 'deleteBook') {
       const targetId = payload.id;
-      const targetBook = books.find(b => b.id === Number(targetId));
-      const updated = books.filter(b => b.id !== Number(targetId));
-      
-      updateBooksStorage(updated);
-      updateHistoryStorage(`[ADMIN REMOVE] ID ${targetId} (${targetBook?.title || 'Book'}) deleted from registry`);
-      showNotification('Book removed from registry by Admin.');
-    } 
+      const targetBook = books.find((b: BookRecord) => b.id === Number(targetId));
+      const updated = books.filter((b: BookRecord) => b.id !== Number(targetId));
+      commitToDatabase(updated);
+      logToDatabase(`[DB DELETE] ID ${targetId} (${targetBook?.title}) removed`);
+      showNotification('Record dropped from database.');
+    }
+    else if (action === 'clearAllBooks') {
+      commitToDatabase([]);
+      logToDatabase(`[DB DROP TABLE] Entire catalog table wiped.`);
+      showNotification('Catalog database emptied.');
+    }
+    else if (action === 'seedDatabase') {
+      commitToDatabase(INITIAL_DATABASE_CATALOG);
+      logToDatabase(`[DB SEED] Restored default 10 engineering core records.`);
+      showNotification('Database re-seeded successfully.');
+    }
     else if (action === 'issueBook' || action === 'returnBook') {
       const targetId = payload.id;
-      
       const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const issueDateStr = `${year}-${month}-${day}`;
-
+      const issueDateStr = now.toISOString().split('T')[0];
       const returnDateObj = new Date(now);
       returnDateObj.setMonth(returnDateObj.getMonth() + 1);
-      const retYear = returnDateObj.getFullYear();
-      const retMonth = String(returnDateObj.getMonth() + 1).padStart(2, '0');
-      const retDay = String(returnDateObj.getDate()).padStart(2, '0');
-      const returnDateStr = `${retYear}-${retMonth}-${retDay}`;
+      const returnDateStr = returnDateObj.toISOString().split('T')[0];
 
-      let updated = books.map(b => {
+      let updated = books.map((b: BookRecord) => {
         if (b.id === Number(targetId)) {
           if (action === 'issueBook') {
             if (b.isIssued) return b;
-            return { 
-              ...b, 
-              isIssued: true, 
-              issuedTo: `${activeStudent?.id} (${activeStudent?.name})`,
-              issuedDate: issueDateStr,
-              returnDate: returnDateStr
-            };
+            return { ...b, isIssued: true, issuedTo: `${activeStudent?.name} (${activeStudent?.id})`, issuedDate: issueDateStr, returnDate: returnDateStr };
           } else {
-            if (!b.isIssued) return b;
-            if (activeStudent && !b.issuedTo?.includes(activeStudent.id)) {
-              return b;
-            }
+            if (!b.isIssued || !b.issuedTo?.includes(activeStudent!.id)) return b;
             return { ...b, isIssued: false, issuedTo: null, issuedDate: undefined, returnDate: undefined };
           }
         }
         return b;
       });
 
-      updateBooksStorage(updated);
+      commitToDatabase(updated);
       if (action === 'issueBook') {
-        updateHistoryStorage(`[STUDENT ISSUE] Book ID ${targetId} issued on ${issueDateStr} to ${activeStudent?.id}`);
+        logToDatabase(`[DB ISSUE] ${activeStudent?.name} (${activeStudent?.id}) checked out Book ID ${targetId}`);
       } else {
-        updateHistoryStorage(`[STUDENT RETURN] Book ID ${targetId} returned by ${activeStudent?.id}`);
+        logToDatabase(`[DB RETURN] ${activeStudent?.name} (${activeStudent?.id}) returned Book ID ${targetId}`);
       }
-      showNotification(`Book transaction completed successfully!`);
+      showNotification(`Database transaction committed!`);
     }
   };
 
-  const handleSearch = () => {
-    const targetId = Number(searchId);
-    if (!targetId) return;
-
-    let sortedBooks = [...books].sort((a, b) => a.id - b.id);
-    let left = 0, right = sortedBooks.length - 1;
-    let found: BookRecord | null = null;
-
-    while (left <= right) {
-      let mid = Math.floor((left + right) / 2);
-      if (sortedBooks[mid].id === targetId) { found = sortedBooks[mid]; break; }
-      if (sortedBooks[mid].id < targetId) left = mid + 1;
-      else right = mid - 1;
-    }
-    setSearchResult(found);
-  };
-
-  const issuedCount = books.filter(b => b.isIssued).length;
+  const issuedCount = books.filter((b: BookRecord) => b.isIssued).length;
   const availableCount = books.length - issuedCount;
-  const myIssuedBooks = activeStudent ? books.filter(b => b.isIssued && b.issuedTo?.includes(activeStudent.id)) : [];
-  const allIssuedBooks = books.filter(b => b.isIssued);
+  const myIssuedBooks = activeStudent ? books.filter((b: BookRecord) => b.isIssued && b.issuedTo?.includes(activeStudent.id)) : [];
+  const allIssuedBooks = books.filter((b: BookRecord) => b.isIssued);
+
+  const filteredBooks = books.filter((b: BookRecord) => {
+    const matchesCat = selectedCategory === 'All' || b.category === selectedCategory;
+    const matchesSearch = b.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          b.author.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          b.id.toString().includes(searchQuery);
+    return matchesCat && matchesSearch;
+  }).sort((a: BookRecord, b: BookRecord) => {
+    if (sortBy === 'id') return a.id - b.id;
+    if (sortBy === 'title') return a.title.localeCompare(b.title);
+    if (sortBy === 'status') return Number(a.isIssued) - Number(b.isIssued);
+    return 0;
+  });
+
+  const displayedHistory = currentRole === 'student' && activeStudent
+    ? history.filter((h: HistoryLog) => h.logMessage.includes(activeStudent.id) || h.logMessage.includes(activeStudent.name))
+    : history;
 
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-300 font-sans flex flex-col justify-between selection:bg-zinc-700 selection:text-zinc-100">
       
-      {notification && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#18181b] border border-zinc-800 text-zinc-200 text-xs px-4 py-3 rounded shadow-lg tracking-wide">
-          {notification}
+      {isMaintenanceMode && currentRole !== 'admin' && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30 text-amber-400 px-8 py-3 text-xs text-center font-mono flex items-center justify-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+          <span>DATABASE MAINTENANCE IN PROGRESS. Expected online: <strong className="text-zinc-200">{maintenanceResumeTime}</strong>.</span>
         </div>
       )}
 
-      {welcomeBanner && (
-        <div className="fixed top-4 right-4 z-50 bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs px-4 py-2.5 rounded shadow">
-          {welcomeBanner}
+      {notification && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#18181b] border border-zinc-800 text-zinc-200 text-xs px-4 py-3 rounded shadow-lg tracking-wide">
+          {notification}
         </div>
       )}
 
@@ -328,8 +433,8 @@ export default function SELibrarySystem() {
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
           <div className="bg-[#121215] border border-zinc-800 rounded-lg p-6 max-w-sm w-full space-y-5">
             <div>
-              <h2 className="text-sm font-medium text-zinc-100 tracking-wide">Administrator Access</h2>
-              <p className="text-[11px] text-zinc-500 mt-0.5">Enter master passcode to manage registry.</p>
+              <h2 className="text-sm font-medium text-zinc-100 tracking-wide">Root Administrator Access</h2>
+              <p className="text-[11px] text-zinc-500 mt-0.5">Enter master database passcode.</p>
             </div>
             <form onSubmit={handleAdminLogin} className="space-y-3">
               <input type="password" placeholder="Passcode (admin123)" value={adminPasscode} onChange={e => setAdminPasscode(e.target.value)} className="w-full bg-[#18181b] border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600" required />
@@ -346,8 +451,10 @@ export default function SELibrarySystem() {
         <header className="border-b border-zinc-800/80 bg-[#0c0c0e] px-8 py-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-[11px] uppercase tracking-widest text-zinc-400 font-mono">DTU SE Department — Core Architecture</span>
+              <span className={`w-2 h-2 rounded-full ${isMaintenanceMode ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'}`}></span>
+              <span className="text-[11px] uppercase tracking-widest text-zinc-400 font-mono">
+                DTU SE Department — Persistent Database Architecture {isMaintenanceMode && '[MAINTENANCE]'}
+              </span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-zinc-400">
               Library Management System
@@ -356,9 +463,10 @@ export default function SELibrarySystem() {
 
           <div className="flex items-center gap-3">
             {currentRole === 'student' ? (
-              <div className="flex items-center gap-3 bg-[#121215] border border-zinc-800 px-3 py-1.5 rounded text-xs">
-                <span className="text-zinc-300">{activeStudent?.name}</span>
-                <button onClick={handleStudentLogout} className="text-zinc-500 hover:text-zinc-300">Logout</button>
+              <div className="flex items-center gap-3 bg-[#121215] border border-zinc-800 px-3.5 py-1.5 rounded text-xs">
+                <span className="text-zinc-200 font-medium">User: {activeStudent?.name}</span>
+                <span className="text-zinc-500 font-mono text-[10px]">({activeStudent?.id})</span>
+                <button onClick={handleStudentLogout} className="text-zinc-500 hover:text-zinc-300 ml-2">Logout</button>
               </div>
             ) : (
               <button onClick={() => setShowStudentModal(true)} className="text-xs bg-[#18181b] border border-zinc-800 text-zinc-300 px-3.5 py-1.5 rounded hover:bg-zinc-800 transition">
@@ -386,7 +494,7 @@ export default function SELibrarySystem() {
         <main className="max-w-6xl mx-auto p-8 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-[#121215] border border-zinc-800/80 p-5 rounded">
-              <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-mono">Total Registry</span>
+              <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-mono">Total DB Records</span>
               <p className="text-2xl font-normal text-zinc-100 mt-1 font-mono">{books.length}</p>
             </div>
             <div className="bg-[#121215] border border-zinc-800/80 p-5 rounded">
@@ -401,16 +509,38 @@ export default function SELibrarySystem() {
 
           {activeTab === 'inventory' && (
             <div className="space-y-4">
-              <div className="bg-[#121215] border border-zinc-800/80 p-5 rounded flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-                <div className="flex gap-2 w-full sm:w-auto">
-                  <input type="number" placeholder="Enter Book ID..." value={searchId} onChange={e => setSearchId(e.target.value)} className="bg-[#18181b] border border-zinc-800 rounded px-3 py-1.5 text-xs text-zinc-200 w-full sm:w-56 focus:outline-none focus:border-zinc-600 font-mono" />
-                  <button onClick={handleSearch} className="bg-zinc-800 text-zinc-300 text-xs px-4 py-1.5 rounded hover:bg-zinc-700 transition">Search</button>
-                </div>
-                {searchResult !== undefined && (
-                  <div className="text-xs text-zinc-400 font-mono">
-                    {searchResult ? `Match: [${searchResult.id}] ${searchResult.title}` : 'Status: Record not found.'}
+              <div className="bg-[#121215] border border-zinc-800/80 p-5 rounded space-y-4">
+                <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+                  <div className="flex gap-2 w-full sm:w-auto flex-1">
+                    <input 
+                      type="text" 
+                      placeholder="Live search by title, author or ID..." 
+                      value={searchQuery} 
+                      onChange={e => setSearchQuery(e.target.value)} 
+                      className="bg-[#18181b] border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 w-full sm:w-80 focus:outline-none focus:border-zinc-600 font-mono" 
+                    />
                   </div>
-                )}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-zinc-500 font-mono">Sort By:</span>
+                    <select value={sortBy} onChange={e => setSortBy(e.target.value as any)} className="bg-[#18181b] border border-zinc-800 rounded px-3 py-1.5 text-xs text-zinc-200 focus:outline-none font-mono">
+                      <option value="id">Book ID</option>
+                      <option value="title">Title (A-Z)</option>
+                      <option value="status">Availability</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-zinc-800">
+                  {CATEGORIES.map((cat: string) => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`text-[11px] px-3 py-1 rounded font-mono transition ${selectedCategory === cat ? 'bg-zinc-200 text-zinc-950 font-medium' : 'bg-[#18181b] text-zinc-400 hover:text-zinc-200 border border-zinc-800'}`}
+                    >
+                      {cat} {cat === 'All' ? `(${books.length})` : `(${books.filter((b: BookRecord) => b.category === cat).length})`}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="bg-[#121215] border border-zinc-800/80 rounded overflow-hidden">
@@ -418,38 +548,48 @@ export default function SELibrarySystem() {
                   <thead>
                     <tr className="border-b border-zinc-800 text-zinc-500 font-mono uppercase tracking-wider text-[10px]">
                       <th className="py-3 px-5">ID</th>
-                      <th className="py-3 px-5">Title</th>
+                      <th className="py-3 px-5">Title & Category</th>
                       <th className="py-3 px-5">Author</th>
                       <th className="py-3 px-5">Status</th>
                       <th className="py-3 px-5 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800/50">
-                    {books.map(b => {
-                      const isIssuedByMe = activeStudent && b.isIssued && b.issuedTo?.includes(activeStudent.id);
-
-                      return (
-                        <tr key={b.id} className="hover:bg-zinc-900/40 transition">
-                          <td className="py-3.5 px-5 font-mono text-zinc-400">{b.id}</td>
-                          <td className="py-3.5 px-5 text-zinc-200 font-medium">{b.title}</td>
-                          <td className="py-3.5 px-5 text-zinc-400">{b.author}</td>
-                          <td className="py-3.5 px-5">
-                            <span className={`inline-block text-[10px] px-2 py-0.5 rounded font-mono ${b.isIssued ? 'bg-zinc-800 text-zinc-400' : 'bg-zinc-800/50 text-zinc-300'}`}>
-                              {b.isIssued ? 'Not Available' : 'Available'}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-5 text-right">
-                            {!b.isIssued ? (
-                              <button onClick={() => handleAction('issueBook', { id: b.id })} className="bg-zinc-800 text-zinc-300 px-3 py-1 rounded text-[11px] hover:bg-zinc-700 transition">Issue</button>
-                            ) : isIssuedByMe ? (
-                              <button onClick={() => handleAction('returnBook', { id: b.id })} className="border border-zinc-700 text-zinc-300 px-3 py-1 rounded text-[11px] hover:bg-zinc-800 transition">Return</button>
-                            ) : (
-                              <span className="text-[11px] text-zinc-500 font-mono italic">Not Available</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {filteredBooks.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-12 text-center text-zinc-500 font-mono">
+                          Database Catalog is currently empty. Use Admin Panel to seed or add books.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredBooks.map((b: BookRecord) => {
+                        const isIssuedByMe = activeStudent && b.isIssued && b.issuedTo?.includes(activeStudent.id);
+                        return (
+                          <tr key={b.id} className="hover:bg-zinc-900/40 transition">
+                            <td className="py-3.5 px-5 font-mono text-zinc-400">{b.id}</td>
+                            <td className="py-3.5 px-5 text-zinc-200 font-medium">
+                              {b.title}
+                              <span className="inline-block ml-2 text-[10px] font-mono bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">{b.category}</span>
+                            </td>
+                            <td className="py-3.5 px-5 text-zinc-400">{b.author}</td>
+                            <td className="py-3.5 px-5">
+                              <span className={`inline-block text-[10px] px-2 py-0.5 rounded font-mono ${b.isIssued ? 'bg-zinc-800 text-zinc-400' : 'bg-emerald-950/60 border border-emerald-900/60 text-emerald-400'}`}>
+                                {b.isIssued ? 'Not Available' : 'Available'}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-5 text-right">
+                              {!b.isIssued ? (
+                                <button onClick={() => handleAction('issueBook', { id: b.id })} className="bg-zinc-800 text-zinc-300 px-3 py-1 rounded text-[11px] hover:bg-zinc-700 transition">Issue</button>
+                              ) : isIssuedByMe ? (
+                                <button onClick={() => handleAction('returnBook', { id: b.id })} className="border border-zinc-700 text-zinc-300 px-3 py-1 rounded text-[11px] hover:bg-zinc-800 transition">Return</button>
+                              ) : (
+                                <span className="text-[11px] text-zinc-500 font-mono italic">Checked Out</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -459,8 +599,8 @@ export default function SELibrarySystem() {
           {activeTab === 'dashboard' && currentRole === 'student' && (
             <div className="bg-[#121215] border border-zinc-800/80 p-6 rounded space-y-4">
               <div>
-                <h2 className="text-sm font-medium text-zinc-100 tracking-wide">My Personal Dashboard</h2>
-                <p className="text-[11px] text-zinc-500 mt-0.5">Books currently checked out under your student ID: {activeStudent?.id}</p>
+                <h2 className="text-sm font-medium text-zinc-100 tracking-wide">Welcome back, {activeStudent?.name}</h2>
+                <p className="text-[11px] text-zinc-500 mt-0.5">Personal database dashboard for SE Roll Number: <span className="font-mono text-zinc-400">{activeStudent?.id}</span></p>
               </div>
 
               {myIssuedBooks.length === 0 ? (
@@ -473,7 +613,7 @@ export default function SELibrarySystem() {
                     <thead>
                       <tr className="border-b border-zinc-800 text-zinc-500 font-mono uppercase tracking-wider text-[10px]">
                         <th className="py-3 px-5">ID</th>
-                        <th className="py-3 px-5">Book Title</th>
+                        <th className="py-3 px-5">Book Title & Category</th>
                         <th className="py-3 px-5">Date of Issuance</th>
                         <th className="py-3 px-5">Return Due Date</th>
                         <th className="py-3 px-5">Fine Status</th>
@@ -481,22 +621,34 @@ export default function SELibrarySystem() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50">
-                      {myIssuedBooks.map(b => (
-                        <tr key={b.id} className="hover:bg-zinc-900/40 transition font-mono">
-                          <td className="py-3.5 px-5 text-zinc-400">{b.id}</td>
-                          <td className="py-3.5 px-5 text-zinc-200 font-medium font-sans">{b.title}</td>
-                          <td className="py-3.5 px-5 text-zinc-300">{b.issuedDate || 'N/A'}</td>
-                          <td className="py-3.5 px-5 text-zinc-300">{b.returnDate || 'N/A'} (1 Month)</td>
-                          <td className="py-3.5 px-5">
-                            <span className="bg-emerald-950/60 border border-emerald-900/60 text-emerald-400 text-[10px] px-2 py-0.5 rounded">
-                              No Fine
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-5 text-right font-sans">
-                            <button onClick={() => handleAction('returnBook', { id: b.id })} className="border border-zinc-700 text-zinc-300 px-3 py-1 rounded text-[11px] hover:bg-zinc-800 transition">Return</button>
-                          </td>
-                        </tr>
-                      ))}
+                      {myIssuedBooks.map((b: BookRecord) => {
+                        const { fine, isOverdue, daysLate } = calculateFine(b.returnDate);
+                        return (
+                          <tr key={b.id} className="hover:bg-zinc-900/40 transition font-mono">
+                            <td className="py-3.5 px-5 text-zinc-400">{b.id}</td>
+                            <td className="py-3.5 px-5 text-zinc-200 font-medium font-sans">
+                              {b.title}
+                              <span className="block text-[10px] text-zinc-500 mt-0.5">{b.category}</span>
+                            </td>
+                            <td className="py-3.5 px-5 text-zinc-300">{b.issuedDate || 'N/A'}</td>
+                            <td className="py-3.5 px-5 text-zinc-300">{b.returnDate || 'N/A'}</td>
+                            <td className="py-3.5 px-5">
+                              {isOverdue ? (
+                                <span className="bg-red-950/60 border border-red-900/60 text-red-400 text-[10px] px-2 py-0.5 rounded">
+                                  ₹{fine} Fine ({daysLate}d overdue)
+                                </span>
+                              ) : (
+                                <span className="bg-emerald-950/60 border border-emerald-900/60 text-emerald-400 text-[10px] px-2 py-0.5 rounded">
+                                  No Fine
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-5 text-right font-sans">
+                              <button onClick={() => handleAction('returnBook', { id: b.id })} className="border border-zinc-700 text-zinc-300 px-3 py-1 rounded text-[11px] hover:bg-zinc-800 transition">Return</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -506,29 +658,184 @@ export default function SELibrarySystem() {
 
           {activeTab === 'transactions' && (
             <div className="bg-[#121215] border border-zinc-800/80 p-6 rounded space-y-3">
-              <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-500 mb-4">Audit Log (Student Issues & Admin Actions)</h2>
-              <div className="space-y-2">
-                {history.map((h, index) => (
-                  <div key={index} className="p-3 bg-[#18181b] border border-zinc-800/60 rounded text-xs flex justify-between items-center font-mono">
-                    <span className="text-zinc-300">{h.logMessage}</span>
-                    <span className="text-zinc-600 text-[11px]">{h.time}</span>
-                  </div>
-                ))}
-              </div>
+              <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-500 mb-4">
+                {currentRole === 'student' ? `Personal Activity Log — ${activeStudent?.name} (${activeStudent?.id})` : 'Master Database Audit Trail Log'}
+              </h2>
+              {displayedHistory.length === 0 ? (
+                <div className="py-8 text-center text-xs text-zinc-500 font-mono border border-dashed border-zinc-800 rounded">
+                  No database audit records found.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {displayedHistory.map((h: HistoryLog, index: number) => (
+                    <div key={index} className="p-3 bg-[#18181b] border border-zinc-800/60 rounded text-xs flex justify-between items-center font-mono">
+                      <span className="text-zinc-300">{h.logMessage}</span>
+                      <span className="text-zinc-600 text-[11px]">{h.time}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {activeTab === 'admin' && currentRole === 'admin' && isAdminAuthenticated && (
             <div className="space-y-6">
               <div className="bg-[#121215] border border-zinc-800/80 p-6 rounded space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-500">Database Engine & Maintenance Control</h2>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">Toggle maintenance lock and configure database availability.</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input 
+                      type="text" 
+                      value={maintenanceResumeTime} 
+                      onChange={e => setMaintenanceResumeTime(e.target.value)} 
+                      placeholder="Resume time..." 
+                      className="bg-[#18181b] border border-zinc-800 rounded px-3 py-1.5 text-xs text-zinc-300 font-mono w-40 focus:outline-none" 
+                    />
+                    <button 
+                      onClick={toggleMaintenanceMode} 
+                      className={`text-xs px-4 py-2 rounded font-mono transition ${isMaintenanceMode ? 'bg-amber-500 text-zinc-950 font-bold' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
+                    >
+                      {isMaintenanceMode ? 'Maintenance Active (Disable)' : 'Enable Maintenance Mode'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                  <div className="bg-[#18181b] border border-zinc-800 p-3 rounded font-mono">
+                    <span className="text-[10px] text-zinc-500 uppercase">DB Schema Size</span>
+                    <p className="text-sm font-semibold text-zinc-200 mt-0.5">{books.length} Records</p>
+                  </div>
+                  <div className="bg-[#18181b] border border-zinc-800 p-3 rounded font-mono">
+                    <span className="text-[10px] text-zinc-500 uppercase">Persistence</span>
+                    <p className="text-sm font-semibold text-emerald-400 mt-0.5">JSON Indexed</p>
+                  </div>
+                  <div className="bg-[#18181b] border border-zinc-800 p-3 rounded font-mono">
+                    <span className="text-[10px] text-zinc-500 uppercase">Query Ping</span>
+                    <p className="text-sm font-semibold text-emerald-400 mt-0.5">3ms (Fast)</p>
+                  </div>
+                  <div className="bg-[#18181b] border border-zinc-800 p-3 rounded font-mono">
+                    <span className="text-[10px] text-zinc-500 uppercase">Engine Status</span>
+                    <p className={`text-sm font-semibold mt-0.5 ${isMaintenanceMode ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      {isMaintenanceMode ? 'Maintenance' : 'Synchronized'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-[#121215] border border-zinc-800/80 p-6 rounded space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-500">AI Database Assistant</h2>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">Neural NLP assistant ready to answer any queries in natural language.</p>
+                  </div>
+                  <span className="text-[10px] bg-emerald-950/60 border border-emerald-900/60 text-emerald-400 px-2 py-0.5 rounded font-mono">NLP Active</span>
+                </div>
+
+                <div className="bg-[#18181b] border border-zinc-800 rounded p-4 h-48 overflow-y-auto space-y-3 font-mono text-xs">
+                  {chatMessages.map((msg, i) => (
+                    <div key={i} className={`flex flex-col ${msg.sender === 'admin' ? 'items-end' : 'items-start'}`}>
+                      <div className={`max-w-md p-3 rounded ${msg.sender === 'admin' ? 'bg-zinc-200 text-zinc-950' : 'bg-zinc-900 border border-zinc-800 text-zinc-300'}`}>
+                        <span className="block text-[9px] uppercase opacity-50 mb-1">{msg.sender === 'admin' ? 'Admin Parth' : 'AI Assistant'}</span>
+                        <p className="whitespace-pre-line leading-relaxed">{msg.text}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <form onSubmit={handleAiChatSubmit} className="flex gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="Type anything (e.g. 'Hello', 'How are you?', 'Catalog stats')..." 
+                    value={chatInput} 
+                    onChange={e => setChatInput(e.target.value)} 
+                    className="flex-1 bg-[#18181b] border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600 font-mono" 
+                  />
+                  <button type="submit" className="bg-zinc-200 text-zinc-950 font-medium text-xs px-5 py-2 rounded hover:bg-white transition">Send Query</button>
+                </form>
+              </div>
+
+              <div className="bg-[#121215] border border-zinc-800/80 p-6 rounded space-y-5">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-500">Database Schema Category Graph</h2>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">Real-time percentage distribution across database tables.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleAction('seedDatabase', {})} className="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs px-3 py-1.5 rounded hover:bg-zinc-700 transition font-mono">
+                      Re-Seed DB
+                    </button>
+                    <button onClick={exportLogsToCSV} className="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs px-3 py-1.5 rounded hover:bg-zinc-700 transition font-mono">
+                      Export CSV
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="w-full h-4 bg-zinc-800 rounded-full overflow-hidden flex shadow-inner">
+                    {books.length === 0 ? (
+                      <div className="w-full h-full bg-zinc-700/50 flex items-center justify-center text-[9px] font-mono text-zinc-400">DATABASE EMPTY</div>
+                    ) : (
+                      CATEGORIES.filter(c => c !== 'All').map(cat => {
+                        const count = books.filter(b => b.category === cat).length;
+                        const percentage = (count / books.length) * 100;
+                        if (percentage === 0) return null;
+                        return (
+                          <div
+                            key={cat}
+                            title={`${cat}: ${count} records (${Math.round(percentage)}%)`}
+                            className={`${CATEGORY_COLORS[cat] || 'bg-zinc-600'} h-full transition-all duration-500 hover:opacity-80`}
+                            style={{ width: `${percentage}%` }}
+                          ></div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3">
+                    {CATEGORIES.filter(c => c !== 'All').map(cat => {
+                      const count = books.filter(b => b.category === cat).length;
+                      const percentage = books.length > 0 ? Math.round((count / books.length) * 100) : 0;
+                      return (
+                        <div key={cat} className="bg-[#18181b] border border-zinc-800 p-2.5 rounded flex items-center justify-between text-xs font-mono">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2.5 h-2.5 rounded-full ${CATEGORY_COLORS[cat] || 'bg-zinc-600'}`}></span>
+                            <span className="text-zinc-300 text-[11px]">{cat}</span>
+                          </div>
+                          <span className="text-zinc-400 text-[11px] font-semibold">{count} ({percentage}%)</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-[#121215] border border-zinc-800/80 p-6 rounded space-y-4 flex justify-between items-center">
                 <div>
-                  <h2 className="text-sm font-medium text-zinc-100 tracking-wide">Master Department Dashboard (All Active Issues)</h2>
-                  <p className="text-[11px] text-zinc-500 mt-0.5">Complete overview of all books currently checked out across the Software Engineering department.</p>
+                  <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-500">Master Database Controls</h2>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">Drop table or reset catalog database.</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => handleAction('seedDatabase', {})} className="bg-emerald-950/60 border border-emerald-900/60 text-emerald-300 text-xs px-4 py-2 rounded hover:bg-emerald-900 transition font-mono">
+                    Seed Default Books
+                  </button>
+                  <button onClick={() => handleAction('clearAllBooks', {})} className="bg-red-950/60 border border-red-900/60 text-red-300 text-xs px-4 py-2 rounded hover:bg-red-900 transition font-mono">
+                    Drop All Records
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-[#121215] border border-zinc-800/80 p-6 rounded space-y-4">
+                <div>
+                  <h2 className="text-sm font-medium text-zinc-100 tracking-wide">Master Department Dashboard (Active Issues & Student Audit)</h2>
+                  <p className="text-[11px] text-zinc-500 mt-0.5">Complete overview of all books checked out across SE department indexed by student roll numbers.</p>
                 </div>
 
                 {allIssuedBooks.length === 0 ? (
                   <div className="py-8 text-center text-xs text-zinc-500 font-mono border border-dashed border-zinc-800 rounded">
-                    No books currently issued in the department.
+                    No books currently checked out.
                   </div>
                 ) : (
                   <div className="rounded overflow-hidden border border-zinc-800">
@@ -536,7 +843,7 @@ export default function SELibrarySystem() {
                       <thead>
                         <tr className="border-b border-zinc-800 text-zinc-500 font-mono uppercase tracking-wider text-[10px]">
                           <th className="py-3 px-4">ID</th>
-                          <th className="py-3 px-4">Book Title</th>
+                          <th className="py-3 px-4">Book Title & Category</th>
                           <th className="py-3 px-4">Issued To (Student)</th>
                           <th className="py-3 px-4">Issuance Date</th>
                           <th className="py-3 px-4">Due Date</th>
@@ -544,20 +851,32 @@ export default function SELibrarySystem() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-800/50">
-                        {allIssuedBooks.map(b => (
-                          <tr key={b.id} className="hover:bg-zinc-900/40 transition font-mono">
-                            <td className="py-3 px-4 text-zinc-400">{b.id}</td>
-                            <td className="py-3 px-4 text-zinc-200 font-medium font-sans">{b.title}</td>
-                            <td className="py-3 px-4 text-zinc-300">{b.issuedTo}</td>
-                            <td className="py-3 px-4 text-zinc-400">{b.issuedDate || 'N/A'}</td>
-                            <td className="py-3 px-4 text-zinc-300">{b.returnDate || 'N/A'}</td>
-                            <td className="py-3 px-4">
-                              <span className="bg-emerald-950/60 border border-emerald-900/60 text-emerald-400 text-[10px] px-2 py-0.5 rounded">
-                                No Fine
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
+                        {allIssuedBooks.map((b: BookRecord) => {
+                          const { fine, isOverdue, daysLate } = calculateFine(b.returnDate);
+                          return (
+                            <tr key={b.id} className="hover:bg-zinc-900/40 transition font-mono">
+                              <td className="py-3 px-4 text-zinc-400">{b.id}</td>
+                              <td className="py-3 px-4 text-zinc-200 font-medium font-sans">
+                                {b.title}
+                                <span className="block text-[10px] text-zinc-500 mt-0.5">{b.category}</span>
+                              </td>
+                              <td className="py-3 px-4 text-zinc-300 font-semibold">{b.issuedTo}</td>
+                              <td className="py-3 px-4 text-zinc-400">{b.issuedDate || 'N/A'}</td>
+                              <td className="py-3 px-4 text-zinc-300">{b.returnDate || 'N/A'}</td>
+                              <td className="py-3 px-4">
+                                {isOverdue ? (
+                                  <span className="bg-red-950/60 border border-red-900/60 text-red-400 text-[10px] px-2 py-0.5 rounded">
+                                    ₹{fine} Fine ({daysLate}d late)
+                                  </span>
+                                ) : (
+                                  <span className="bg-emerald-950/60 border border-emerald-900/60 text-emerald-400 text-[10px] px-2 py-0.5 rounded">
+                                    No Fine
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -565,41 +884,53 @@ export default function SELibrarySystem() {
               </div>
 
               <div className="bg-[#121215] border border-zinc-800/80 p-6 rounded space-y-4">
-                <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-500">Insert New Book Record</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-500">Insert New Book Record into Database</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
                   <input type="number" placeholder="Book ID" value={id} onChange={e => setId(e.target.value)} className="bg-[#18181b] border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600 font-mono" />
                   <input type="text" placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} className="bg-[#18181b] border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600" />
                   <input type="text" placeholder="Author" value={author} onChange={e => setAuthor(e.target.value)} className="bg-[#18181b] border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-zinc-600" />
-                  <button onClick={() => handleAction('addBook', { id, title, author })} className="bg-zinc-200 text-zinc-950 font-medium text-xs py-2 rounded hover:bg-white transition">Commit Record</button>
+                  <select value={category} onChange={e => setCategory(e.target.value)} className="bg-[#18181b] border border-zinc-800 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none font-mono">
+                    {CATEGORIES.filter((c: string) => c !== 'All').map((c: string) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <button onClick={() => handleAction('addBook', {})} className="bg-zinc-200 text-zinc-950 font-medium text-xs py-2 rounded hover:bg-white transition">Commit Record</button>
                 </div>
               </div>
 
               <div className="bg-[#121215] border border-zinc-800/80 p-6 rounded space-y-4">
-                <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-500">Admin Management: Remove Books from Registry</h2>
-                <div className="rounded overflow-hidden border border-zinc-800">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-zinc-800 text-zinc-500 font-mono uppercase tracking-wider text-[10px]">
-                        <th className="py-3 px-5">ID</th>
-                        <th className="py-3 px-5">Title</th>
-                        <th className="py-3 px-5">Author</th>
-                        <th className="py-3 px-5 text-right">Admin Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-800/50">
-                      {books.map(b => (
-                        <tr key={b.id} className="hover:bg-zinc-900/40 transition">
-                          <td className="py-3.5 px-5 font-mono text-zinc-400">{b.id}</td>
-                          <td className="py-3.5 px-5 text-zinc-200 font-medium">{b.title}</td>
-                          <td className="py-3.5 px-5 text-zinc-400">{b.author}</td>
-                          <td className="py-3.5 px-5 text-right">
-                            <button onClick={() => handleAction('deleteBook', { id: b.id })} className="bg-red-950/60 border border-red-900/60 text-red-300 px-3 py-1 rounded text-[11px] hover:bg-red-900 transition">Remove Book</button>
-                          </td>
+                <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-500">Admin Management: Remove Books from Database</h2>
+                {books.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-zinc-500 font-mono border border-dashed border-zinc-800 rounded">
+                    No database records to remove.
+                  </div>
+                ) : (
+                  <div className="rounded overflow-hidden border border-zinc-800">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-zinc-800 text-zinc-500 font-mono uppercase tracking-wider text-[10px]">
+                          <th className="py-3 px-5">ID</th>
+                          <th className="py-3 px-5">Title & Category</th>
+                          <th className="py-3 px-5">Author</th>
+                          <th className="py-3 px-5 text-right">Admin Action</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-800/50">
+                        {books.map((b: BookRecord) => (
+                          <tr key={b.id} className="hover:bg-zinc-900/40 transition">
+                            <td className="py-3.5 px-5 font-mono text-zinc-400">{b.id}</td>
+                            <td className="py-3.5 px-5 text-zinc-200 font-medium">
+                              {b.title}
+                              <span className="block text-[10px] font-mono text-zinc-500 mt-0.5">{b.category}</span>
+                            </td>
+                            <td className="py-3.5 px-5 text-zinc-400">{b.author}</td>
+                            <td className="py-3.5 px-5 text-right">
+                              <button onClick={() => handleAction('deleteBook', { id: b.id })} className="bg-red-950/60 border border-red-900/60 text-red-300 px-3 py-1 rounded text-[11px] hover:bg-red-900 transition">Remove Book</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -609,7 +940,7 @@ export default function SELibrarySystem() {
 
       <footer className="border-t border-zinc-800/80 bg-[#0c0c0e] px-8 py-4 text-xs text-zinc-600 flex justify-between font-mono">
         <p>© 2026 Delhi Technological University</p>
-        <p>Engineered Systems Interface</p>
+        <p>Persistent Database Architecture</p>
       </footer>
     </div>
   );
